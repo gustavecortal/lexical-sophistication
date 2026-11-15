@@ -19,7 +19,13 @@ The first run downloads the demo's 4-bit ONNX export of the model (0.58 GB) into
 
 ## How it works
 
-Each word gets a rarity from its frequency in [wordfreq](https://github.com/rspeer/wordfreq)'s English list, 6 minus its Zipf frequency: 0 for words more common than 1 in 1,000, then one point per factor of ten, up to 4. Words of rarity 0 are left alone. Every other word scores its distance from the mean rarity of those words (1.28, weighted by frequency), scaled by the strength. At each step, the model's most likely tokens (20 by default) are raised or lowered by how much they would change the reply's score, and the model's own sampler draws from them. A token that only starts a word counts as the mean score of the words it could become, weighted by their frequency.
+Each word gets a rarity from how often it appears in [wordfreq](https://github.com/rspeer/wordfreq)'s English list: 6 minus its Zipf frequency, from 0 to 4. Words more common than 1 in 1,000, such as *the*, get 0. *Sky*, seen once in 19,000 words, gets 1.3, and *canopy*, once in 300,000, gets 2.5.
+
+At each step, the model's most likely next tokens (20 by default) gain or lose logits in proportion to the strength and to how far their word's rarity is from the average, 1.28 (about that of *sky*). At positive strengths rarer words gain and more common ones lose. Words of rarity 0 get no bonus or penalty. A token that only starts a word, like *sky*, which could still become *skyline*, counts as the mean of the words it could become, weighted by their frequency. The model's own sampler then draws from the adjusted tokens.
+
+<p align="center">
+  <a href="https://gustavecortal.com/lexical-sophistication/"><img src="docs/figure.webp" width="720" alt="The model's likely next words after &quot;Water dripped from the&quot;: as the slider moves to rare words, canopy rises from 16% to 52%, and at common words, high and morning rise"></a>
+</p>
 
 ## Rebuild the word list
 
