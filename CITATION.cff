@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "Please cite lexical sophistication if you use it."
+type: software
+title: "lexical sophistication: steering a language model toward common or rare words"
+abstract: >-
+  A sampler that steers a language model toward common or rare words by how often they appear in English.
+authors:
+  - family-names: Cortal
+    given-names: Gustave
+repository-code: "https://github.com/gustavecortal/lexical-sophistication"
+url: "https://gustavecortal.com/lexical-sophistication/"
+license: MIT
+date-released: "2026-11-15"
+keywords:
+  - lexical sophistication
+  - word frequency
+  - controlled text generation
+  - decoding
+  - sampling
+  - language models
+  - ONNX
+  - Qwen3.5
+references:
+  - type: article
+    title: "Automatically Assessing Lexical Sophistication: Indices, Tools, Findings, and Application"
+    authors:
+      - family-names: Kyle
+        given-names: Kristopher
+      - family-names: Crossley
+        given-names: Scott A.
+    journal: "TESOL Quarterly"
+    volume: 49
+    issue: 4
+    year: 2015
+    doi: "10.1002/tesq.194"
+  - type: software
+    title: "wordfreq"
+    authors:
+      - family-names: Speer
+        given-names: Robyn
+    version: "3.1.1"
+    url: "https://github.com/rspeer/wordfreq"
