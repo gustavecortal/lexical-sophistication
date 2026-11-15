@@ -15,11 +15,11 @@ npm ci
 npx lexical-sophistication "Describe a walk through a forest after the rain." --strength 3
 ```
 
-The first run downloads the model (0.58 GB). Replies then run on the CPU, at about 15 tokens a second on a desktop processor. `--strength` goes from -3 (common words) to 3 (rare words), and 0 gives the model's own reply. The other options (`--seed`, `--max-tokens`, `--temperature`, `--top-k`, `--top-p`, `--presence`) default to the demo's settings.
+The first run downloads the demo's 4-bit ONNX export of the model (0.58 GB) into `~/.cache/lexical-sophistication`, unless the Hugging Face cache holds it. Replies then run on the CPU, at about 15 tokens a second on 16 threads. `--strength` goes from -3 (common words) to 3 (rare words), and 0 gives the model's own reply. The other options (`--seed`, `--max-tokens`, `--temperature`, `--top-k`, `--top-p`, `--presence`) default to the demo's settings.
 
 ## How it works
 
-Each word gets a rarity from its frequency in [wordfreq](https://github.com/rspeer/wordfreq)'s English list: 0 for words more common than 1 in 1,000, then one point per factor of ten, up to 4. At strength λ, a word of rarity r above 0 scores λ(r − 1.28), 1.28 being the average rarity of these words, and more common words score 0. At each step, the model's most likely tokens (20 by default) gain the change in the reply's total score they would make, and the model's own sampler draws from them. A token that only starts a word counts as the mean score of the words it could become, weighted by their frequency.
+Each word gets a rarity from its frequency in [wordfreq](https://github.com/rspeer/wordfreq)'s English list, 6 minus its Zipf frequency: 0 for words more common than 1 in 1,000, then one point per factor of ten, up to 4. Words of rarity 0 are left alone. Every other word scores its distance from the mean rarity of those words (1.28, weighted by frequency), scaled by the strength. At each step, the model's most likely tokens (20 by default) are raised or lowered by how much they would change the reply's score, and the model's own sampler draws from them. A token that only starts a word counts as the mean score of the words it could become, weighted by their frequency.
 
 ## Rebuild the word list
 
@@ -28,7 +28,7 @@ uv run scripts/export_frequencies.py data/frequency-en.json
 node scripts/build_table.mjs data/frequency-en.json data/frequency-en.bin
 ```
 
-This rewrites `data/frequency-en.bin` from wordfreq 3.1.1 in under a minute, byte for byte the table of the live demo. `npm test` checks the sampler against probabilities measured on the demo, and the model's next tokens on the CPU against the demo's.
+This rewrites `data/frequency-en.bin` from wordfreq 3.1.1 in under a minute, identical to the live demo's table. `npm test` checks the sampler, the model's next tokens and a 48-token reply at strength 3 against the demo.
 
 ## License
 

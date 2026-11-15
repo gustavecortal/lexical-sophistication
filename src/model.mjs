@@ -1,6 +1,6 @@
 // Qwen3.5-0.8B on the CPU with ONNX Runtime: onnx-community's 4-bit graphs, the files of the live demo, read from the
 // Hugging Face cache when they are there, else downloaded once into ~/.cache/lexical-sophistication.
-import { existsSync, mkdirSync, createWriteStream, renameSync } from "node:fs";
+import { existsSync, mkdirSync, createWriteStream, renameSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
@@ -8,49 +8,55 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import * as ort from "onnxruntime-node";
 import { loadTokenizer } from "./page/chat.mjs";
-import { picker } from "./page/sampling.mjs";
 
 const MODEL = { repo: "Qwen/Qwen3.5-0.8B", revision: "2fc06364715b967f1860aea9cf38778875588b17" };
 const ONNX = { repo: "onnx-community/Qwen3.5-0.8B-ONNX-OPT", revision: "fafab72d87a9e6be3925b38caf48286d2838f2d0" };
-const HUB = process.env.HF_HUB_CACHE ?? join(homedir(), ".cache/huggingface/hub");
+const HUB = process.env.HF_HUB_CACHE ?? join(process.env.HF_HOME ?? join(homedir(), ".cache/huggingface"), "hub");
 const OWN = join(homedir(), ".cache/lexical-sophistication");
 
 // onnxruntime-node 1.31 reads a Float16Array (Node 24 has them) as empty. Hidden while ONNX Runtime picks its float16
-// array type at the first tensor, so it keeps float16 data as their bits in a Uint16Array.
+// array type at the first tensor, so it keeps float16 data as their bits in a Uint16Array. This holds only if this
+// module is imported before anything else creates an ONNX Runtime tensor.
 const float16 = globalThis.Float16Array;
 delete globalThis.Float16Array;
 new ort.Tensor("float32", new Float32Array(1), [1]);
 globalThis.Float16Array = float16;
+if (!(new ort.Tensor("float16", new Uint16Array(1), [1]).data instanceof Uint16Array)) throw new Error("import model.mjs before creating any ONNX Runtime tensor");
 const floats = (tensor) => (tensor.type === "float16"
   ? Float32Array.from(new Float16Array(tensor.data.buffer, tensor.data.byteOffset, tensor.data.length))
   : Float32Array.from(tensor.data));
 
-// A file of a pinned repository: its path in the Hugging Face cache, or downloaded into OWN.
-async function file({ repo, revision }, name) {
-  const cached = join(HUB, `models--${repo.replace("/", "--")}`, "snapshots", revision, name);
-  if (existsSync(cached)) return cached;
-  const path = join(OWN, repo, revision, name);
-  if (existsSync(path)) return path;
-  mkdirSync(dirname(path), { recursive: true });
-  const response = await fetch(`https://huggingface.co/${repo}/resolve/${revision}/${name}`);
-  if (!response.ok) throw new Error(`${repo}/${name}: HTTP ${response.status}`);
-  process.stderr.write(`downloading ${name}\n`);
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(path + ".part"));
-  renameSync(path + ".part", path);
-  return path;
+// Files of a pinned repository, all from the same folder: the Hugging Face cache's snapshot if it holds every one, else
+// OWN, which downloads those it lacks. An ONNX graph reads its weights from beside it, so the two never split.
+async function files({ repo, revision }, names) {
+  const snapshot = join(HUB, `models--${repo.replace("/", "--")}`, "snapshots", revision);
+  if (names.every((name) => existsSync(join(snapshot, name)))) return names.map((name) => join(snapshot, name));
+  return Promise.all(names.map(async (name) => {
+    const path = join(OWN, repo, revision, name);
+    if (existsSync(path)) return path;
+    mkdirSync(dirname(path), { recursive: true });
+    const response = await fetch(`https://huggingface.co/${repo}/resolve/${revision}/${name}`);
+    if (!response.ok) throw new Error(`${repo}/${name}: HTTP ${response.status}`);
+    process.stderr.write(`downloading ${name}\n`);
+    await pipeline(Readable.fromWeb(response.body), createWriteStream(path + ".part"));
+    const expected = Number(response.headers.get("content-length"));
+    if (expected && statSync(path + ".part").size !== expected) throw new Error(`${repo}/${name}: the download was cut short; run again`);
+    renameSync(path + ".part", path);
+    return path;
+  }));
 }
 
 export async function tokenizer() {
-  return loadTokenizer(async (name) => readFile(await file(MODEL, name), "utf8"));
+  return loadTokenizer(async (name) => readFile((await files(MODEL, [name]))[0], "utf8"));
 }
 
 export class Runner {
   static async create(variant = "q4f16") {
     const session = async (name) => {
-      await file(ONNX, `onnx/${name}_${variant}.onnx_data`);  // read beside the graph
-      return ort.InferenceSession.create(await file(ONNX, `onnx/${name}_${variant}.onnx`));
+      const [graph] = await files(ONNX, [`onnx/${name}_${variant}.onnx`, `onnx/${name}_${variant}.onnx_data`]);
+      return ort.InferenceSession.create(graph);
     };
-    return new Runner(await session("embed_tokens"), await session("decoder_model_merged"));
+    return new Runner(...(await Promise.all([session("embed_tokens"), session("decoder_model_merged")])));
   }
 
   constructor(embed, decoder) {
@@ -90,16 +96,17 @@ export class Runner {
     return { logits: floats(out.logits), state: { past: next, length: past + n } };
   }
 
-  // One reply: token by token until eos or maxNewTokens; pick(logits) chooses each token (the plain sampler by
-  // default), onToken(token) after each.
-  async generate(ids, { maxNewTokens, eos, sampler, pick = picker(sampler), onToken = () => {} }) {
+  // One reply: token by token until eos or maxNewTokens; pick(logits) chooses each token, and onToken(token) gets
+  // each one but eos.
+  async generate(ids, { maxNewTokens, eos, pick, onToken = () => {} }) {
     let { logits, state } = await this.step(ids, this.fresh());
     const out = [];
     for (;;) {
       const token = pick(logits);
       out.push(token);
+      if (token === eos) return out;
       onToken(token);
-      if (token === eos || out.length >= maxNewTokens) return out;
+      if (out.length >= maxNewTokens) return out;
       ({ logits, state } = await this.step([token], state));
     }
   }

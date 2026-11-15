@@ -1,0 +1,7 @@
+{
+ "measured": "the demo page in Edge on WebGPU (q4f16), seed 0 and its other default settings, 48 tokens",
+ "message": "Describe a walk through a forest after the rain.",
+ "strength": 3,
+ "max_new_tokens": 48,
+ "text": "The rain tapped rhythmically against the gnarled bark of Oakleaf, sealing the forest's secrets into dust. As twilight edged in hues of bruised purple and ochre, the scent drifted thickly upward—a damp earthier perfume ming"
+}

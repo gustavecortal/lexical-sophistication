@@ -2,11 +2,29 @@
   "name": "lexical-sophistication",
   "version": "1.0.0",
   "description": "A sampler that steers a language model toward common or rare words by how often they appear in English.",
+  "keywords": [
+    "lexical-sophistication",
+    "word-frequency",
+    "zipf",
+    "decoding",
+    "sampling",
+    "controllable-generation",
+    "language-model",
+    "wordfreq",
+    "qwen",
+    "nlp"
+  ],
   "license": "MIT",
   "type": "module",
-  "bin": { "lexical-sophistication": "src/cli.mjs" },
-  "engines": { "node": ">=24" },
-  "scripts": { "test": "node --test" },
+  "bin": {
+    "lexical-sophistication": "src/cli.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "@huggingface/jinja": "0.5.10",
     "@huggingface/tokenizers": "0.2.0",

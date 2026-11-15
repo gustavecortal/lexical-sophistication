@@ -13,11 +13,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      # The model files are pinned to revisions in src/model.mjs.
+          cache: npm
+      # The model files, by the revisions pinned in src/model.mjs: change the key with them.
       - uses: actions/cache@v6
         with:
           path: ~/.cache/lexical-sophistication
-          key: model-${{ hashFiles('src/model.mjs') }}
+          key: model-2fc06364-fafab72d
       - run: npm ci
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip  # the CPU binaries ship in the package; this skips the CUDA download
       - run: npm test
       - run: npx lexical-sophistication "Describe a walk through a forest after the rain." --strength 3 --max-tokens 24
